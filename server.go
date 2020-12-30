@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -233,6 +234,12 @@ func PostTodo(ctx *fiber.Ctx) error {
 }
 
 func GetTodos(ctx *fiber.Ctx) error {
+	// This is your token payload
+	user := ctx.Locals("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+
+	// Printing it out
+	fmt.Println(claims)
 	return ctx.Status(fiber.StatusOK).JSON(todos)
 }
 
