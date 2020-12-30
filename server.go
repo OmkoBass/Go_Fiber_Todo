@@ -2,9 +2,13 @@ package main
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+
+	"github.com/form3tech-oss/jwt-go"
+	jwtware "github.com/gofiber/jwt/v2"
 )
 
 // Todo define todo struct
@@ -12,6 +16,19 @@ type Todo struct {
 	Id        int
 	Name      string
 	Completed bool
+}
+
+var JwtSecretKey = "SECRET_KEY_STORE_SOMEWHERE"
+
+func auth() fiber.Handler {
+	return jwtware.New(jwtware.Config{
+		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
+			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Unauthorized",
+			})
+		},
+		SigningKey: []byte(JwtSecretKey),
+	})
 }
 
 var todos = []Todo{
@@ -29,8 +46,9 @@ func main() {
 		return ctx.SendString("Hello, World 👋!")
 	})
 
+	app.Post("/login", Login)
 	// Group the endpoint Todo so i don't need to write longer than needed urls
-	api := app.Group("/todos")
+	api := app.Group("/todos", auth())
 	api.Get("/", GetTodos)
 	api.Post("/", PostTodo)
 	api.Get("/:id", GetTodo)
@@ -41,6 +59,44 @@ func main() {
 
 	app.Listen(":5000")
 }
+
+func Login(ctx *fiber.Ctx) error {
+	type request struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	var body request
+
+	bodyErr := ctx.BodyParser(&body)
+
+	if bodyErr != nil || (body.Username != "omkobass" && body.Password != "TataIgre123") {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"message": "Unauthorized",
+		})
+	}
+
+	token := jwt.New(jwt.SigningMethodHS256)
+
+	claims := token.Claims.(jwt.MapClaims)
+	claims["username"] = body.Username
+	claims["password"] = body.Password
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+	signed, signErr := token.SignedString([]byte(JwtSecretKey))
+
+	if signErr != nil {
+		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+		"token": signed,
+	})
+}
+
+// Restricted routes
 
 func UpdateTodo(ctx *fiber.Ctx) error {
 	type request struct {
@@ -179,3 +235,4 @@ func PostTodo(ctx *fiber.Ctx) error {
 func GetTodos(ctx *fiber.Ctx) error {
 	return ctx.Status(fiber.StatusOK).JSON(todos)
 }
+
